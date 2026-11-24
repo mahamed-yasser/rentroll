@@ -1,0 +1,22 @@
+'use strict';
+const e2e = require('./e2ekit'); const { build } = require('../src/app');
+const clock = () => new Date('2026-11-24T12:00:00Z');
+e2e((o) => build({ ...o, clock }), async ({ page, shot, ok, restart, login, modal, tick, url }) => {
+  await login(); await page.waitFor('document.body.innerText.includes("Who owes rent")'); ok((await page.text()).includes('Ben Ortiz'), 'dashboard lists tenants who owe rent'); await tick(400); await shot('01-dashboard');
+  await page.click('a[data-id=units]'); await page.waitFor('document.querySelectorAll("tbody tr").length===8'); ok((await page.text()).includes('Vacant'), 'rent roll shows 8 units with vacant status'); await shot('02-units');
+  await page.click('a[data-id=leases]'); await page.waitFor('document.querySelectorAll("tbody tr").length>=6');
+  await page.clickText('tbody tr', 'Ben Ortiz'); await page.waitFor('document.querySelector("#balance")');
+  ok((await page.eval('document.querySelector("#balance").textContent')) === '$2,910.00', 'Ben Ortiz balance is 2 rents + 2 late fees = $2,910.00'); await shot('03-ledger');
+  await page.clickText('button', 'Record payment'); await page.waitFor('document.querySelector(".modal")'); await modal('amount', '1455.00'); await page.click('#modal-submit');
+  await page.waitFor('document.querySelector("#balance").textContent==="$1,455.00"'); ok(true, 'payment of $1,455.00 clears the oldest rent and fee first');
+  await restart(); await page.eval('location.reload()'); await page.waitFor('document.querySelector("#balance")&&document.querySelector("#balance").textContent==="$1,455.00"'); ok(true, 'payment persisted after server restart');
+  await page.clickText('tbody tr button', 'Waive'); await page.waitFor('document.querySelector(".modal")'); await page.click('#modal-submit');
+  await page.waitFor('document.querySelector("#balance").textContent!=="$1,455.00"'); ok(true, 'a late fee can be waived and the balance drops');
+  await page.click('a[data-id=leases]'); await page.waitFor('document.querySelectorAll("tbody tr").length>=6');
+  await page.clickText('button', 'New lease'); await page.waitFor('document.querySelector(".modal")');
+  await page.eval(`(()=>{const s=document.querySelector('[name=unit_id]');s.value=[...s.options].find(o=>o.textContent.includes('2B')).value})()`);
+  await modal('start_date', '2026-11-10'); await page.click('#modal-submit'); await page.waitFor('!document.querySelector(".modal")');
+  await page.waitFor('document.querySelectorAll("tbody tr").length>=7'); ok((await page.text()).includes('10 Nov 2026'), 'new lease on vacant unit 2B saved and listed');
+  await page.viewport(390, 844, true); await page.eval('location.hash="#/dashboard"'); await tick(700); await shot('04-mobile-dashboard');
+  await page.eval('location.hash="#/units"'); await page.waitFor('document.querySelectorAll("tbody tr").length>=8'); await shot('05-mobile-units');
+}, { docs: __dirname });
